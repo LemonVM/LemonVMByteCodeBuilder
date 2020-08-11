@@ -1,0 +1,45 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'lemon_vm_bytecode_builder'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=lemon_vm_bytecode_builder",
+                    "--package=lemon_vm_bytecode_builder"
+                ],
+                "filter": {
+                    "name": "lemon_vm_bytecode_builder",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'lemon_vm_bytecode_builder'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=lemon_vm_bytecode_builder",
+                    "--package=lemon_vm_bytecode_builder"
+                ],
+                "filter": {
+                    "name": "lemon_vm_bytecode_builder",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

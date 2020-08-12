@@ -1,4 +1,6 @@
-use super::irbuilder::*;
+use super::opcode_builder::*;
+use liblemonvm::binary::{constant::Constant, debug::{DebugVariable, DebugVariableTable}};
+use std::collections::BTreeMap;
 
 trait BytecodeGen {
     fn gen(&self) -> Vec<u8>;
@@ -20,18 +22,21 @@ pub enum FunctionType {
     // currently disabled
     AsyncGenerator,
 }
-
+#[derive(Debug)]
 pub struct Function {
-    function_type: FunctionType,
+    // function_type: FunctionType,
     // indexed by uuid
     // just used to build arguments object
-    args_count: u8,
-    max_registers: u16,
+    // args_count: u8,
+    // max_registers: u16,
 
-    register_alloc_table: Vec<(u16, u16, u16)>,
+    pub constant_pool_ref: *mut BTreeMap<u16,Constant>,
 
-    exception_table: Vec<Scope>,
-    scope: Scope,
+    pub debug_variable_table: DebugVariableTable,
+    pub register_alloc_table: Vec<(u16, Vec<Variable>)>,
+
+    // exception_table: Vec<Scope>,
+    // scope: Scope,
 }
 
 // impl Function {
@@ -49,14 +54,20 @@ pub struct Function {
 // }
 
 #[derive(Debug, Clone)]
+pub struct Variable{
+    pub name: String,
+    pub start_pc: u16,
+    pub end_pc:u16,
+}
+
+#[derive(Debug, Clone)]
 pub struct Scope {
     pub father: Option<*mut Scope>,
     pub start_pc: u16,
     pub end_pc: u16,
-    pub variable_table: Vec<(String, u16, u16)>,
+    pub variable_table: Vec<Variable>,
     pub is_exception_scope: bool,
-    pub shit: Vec<u8>,
-    pub code: Vec<HighCode>,
+    pub code: Vec<(u16,OpCodeFormat)>,
 }
 
 impl Scope {
@@ -83,25 +94,49 @@ impl Scope {
             end_pc,
             variable_table: vec![],
             is_exception_scope,
-            shit: vec![],
             code: vec![],
         }
     }
 
     pub fn alloc_register(&self, fun: &mut Function) {
         let mut len = fun.register_alloc_table.len();
-        for (_, start_pc, end_pc) in self.variable_table.iter() {
+        for var in self.variable_table.iter() {
+            let Variable{name, start_pc, end_pc} = var;
             let mut i = 0;
             loop {
-                let (spc, epc, r) =
-                    &mut fun.register_alloc_table[i];
-                if i == len {
-                    fun.register_alloc_table.push((*start_pc, *end_pc, i as u16));
-                    len+=1;
+                if len == i{
+                    fun.register_alloc_table.push((i as u16,vec![var.clone()]));
+
+                    let pool = unsafe{&mut *fun.constant_pool_ref};
+                    let plen = pool.len();
+                    pool.insert(plen as u16, Constant::String(name.clone()));
+                    fun.debug_variable_table.table.push(DebugVariable{
+                        name: plen as u16,
+                        start_pc: *start_pc,
+                        end_pc: *end_pc,
+                        register: i as u16,
+                    });
+
+                    len += 1;
+                    i = 0;
                     break;
-                } else if start_pc > epc {
-                    *spc = *start_pc;
-                    *epc = *end_pc;
+                }
+                let (r, vars) =
+                    &mut fun.register_alloc_table[i];
+
+                if *start_pc > vars.last().unwrap().end_pc {
+                    vars.push(var.clone());
+
+                    let pool = unsafe{&mut *fun.constant_pool_ref};
+                    let plen = pool.len();
+                    pool.insert(plen as u16, Constant::String(name.clone()));
+                    fun.debug_variable_table.table.push(DebugVariable{
+                        name: plen as u16,
+                        start_pc: *start_pc,
+                        end_pc: *end_pc,
+                        register: i as u16,
+                    });
+                    i = 0;
                     break;
                 }
                 i+=1;
@@ -119,19 +154,19 @@ impl Scope {
         unsafe {
             (&mut *scope)
                 .variable_table
-                .push((name, self.end_pc, self.end_pc))
+                .push(Variable{
+                    name: name, 
+                    start_pc:self.end_pc,
+                    end_pc:self.end_pc
+                })
         };
     }
 
-    pub fn add_code(&mut self, code: &mut Vec<HighCode>) {
-        self.end_pc += (code.len() / 8) as u16;
+    pub fn add_code(&mut self, code: &mut Vec<(u16,OpCodeFormat)>) {
+        self.end_pc += code.len() as u16;
         self.code.append(code);
     }
 
-    pub fn add_shit(&mut self, code: &mut Vec<u8>) {
-        self.end_pc += (code.len() / 8) as u16;
-        self.shit.append(code);
-    }
 
     pub fn adjust_end_pc(&mut self) {
         match self.father {
@@ -143,22 +178,23 @@ impl Scope {
         }
     }
 
-    pub fn end(&mut self) {
+    pub fn end(&mut self,fun: &mut Function) {
         self.adjust_end_pc();
         // correct end_pc for variable table
         let end_pc = self.end_pc;
         for i in 0..self.variable_table.len() {
-            self.variable_table[i].2 = end_pc;
+            self.variable_table[i].end_pc = end_pc;
             for j in i..self.variable_table.len() {
-                if self.variable_table[i].0 == self.variable_table[j].0 && i != j {
-                    self.variable_table[i].2 = self.variable_table[j].1;
+                if self.variable_table[i].name == self.variable_table[j].name && i != j {
+                    self.variable_table[i].end_pc = self.variable_table[j].start_pc;
                     break;
                 }
             }
         }
+        self.alloc_register(fun);
         match self.father {
             Some(father) => unsafe {
-                (&mut *father).shit.append(&mut self.shit);
+                (&mut *father).code.append(&mut self.code);
             },
             None => {}
         }

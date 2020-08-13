@@ -9,6 +9,7 @@ pub enum OpCode {
     MOV = 0x5555,
     ADD = 0x6666,
     EXTEND = 0x7777,
+    JMP = 0x8888,
 }
 #[derive(Debug, Clone)]
 pub enum OpCodeFormat{
@@ -18,6 +19,7 @@ pub enum OpCodeFormat{
     E3(String,String,String),
     ED2(String,u16),
     ED3(String,u16,u16),
+    L1(*mut DeclScope),
     D3(u16,u16,u16)
 }
 #[derive(Debug, Clone)]
@@ -25,7 +27,7 @@ pub struct OpCodeBuilder{
     pub data:Vec<(u16,OpCodeFormat)>,
 }
 use OpCodeFormat::*;
-use crate::node::Function;
+use crate::node::{Scope, Function, DeclScope};
 impl OpCodeBuilder{
     pub fn new()-> Self{
         OpCodeBuilder{data:vec![]}
@@ -61,6 +63,9 @@ impl OpCodeBuilder{
     pub fn add(&mut self,src1: String, src2:String, dst:String){
         self.data.push((OpCode::ADD as u16,E3(src1,src2,dst)));
     }
+    pub fn jmp(&mut self,scope:*mut DeclScope){
+        self.data.push((OpCode::JMP as u16,L1(scope)));
+    }
     pub fn gen_code(&self,function:&Function) -> Vec<u8>{
         let mut ret = vec![];
         for pc in 0..self.data.len(){
@@ -90,6 +95,16 @@ impl OpCodeBuilder{
                     let dst = find_suitable_register(function, dst.clone(), pc as u16);
                     vec![dst as u8, (dst >> 8) as u8, *d1 as u8,(d1 >> 8) as u8 , *d2 as u8,(d2 >> 8) as u8 ]
                 },
+                L1(dcl1) => {
+                    let scope = unsafe{(**dcl1).scope};
+                    match scope{
+                        Some(d1 )=>{
+                            let start_pc = unsafe{(&*d1).start_pc};
+                            vec![(start_pc) as u8, (start_pc >> 8) as u8, 0x00,0x00,0x00,0x00]
+                        },
+                        None => panic!("Scope does not exist")
+                    }
+                }
                 D3(d1,d2,d3) => {
                     vec![*d1 as u8,(d1 >> 8) as u8 ,*d2 as u8,(d2 >> 8) as u8 ,*d3 as u8,(d3 >> 8) as u8 ]
                 }

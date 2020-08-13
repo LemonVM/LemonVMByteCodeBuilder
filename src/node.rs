@@ -59,6 +59,10 @@ pub struct Variable{
     pub start_pc: u16,
     pub end_pc:u16,
 }
+#[derive(Debug, Clone)]
+pub struct DeclScope{
+    pub scope: Option<*mut Scope>,
+}
 
 #[derive(Debug, Clone)]
 pub struct Scope {

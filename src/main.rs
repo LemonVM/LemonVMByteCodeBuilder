@@ -33,7 +33,19 @@ fn main() {
     s2.add_variable(Some("b".to_string()), &mut s1);
     cb.nop();
     s2.add_code(&mut cb.get_and_clean());
+    let mut ds3 = DeclScope{scope:None};
+    cb.jmp(&mut ds3);
+    s2.add_code(&mut cb.get_and_clean());
+    let mut ds1 = DeclScope{scope:Some(&mut s1)};
+    cb.jmp(&mut ds1);
+    s2.add_code(&mut cb.get_and_clean());
     s2.end(&mut function);
+
+    let mut s3 = Scope::start(Some(&mut s1), false, false);
+    ds3.scope = Some(&mut s3);
+    cb.nop();
+    s3.add_code(&mut cb.get_and_clean());
+    s3.end(&mut function);
     s1.end(&mut function);
     
     cb.data = s1.code.clone();
